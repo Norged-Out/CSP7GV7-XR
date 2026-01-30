@@ -40,6 +40,11 @@ static bool rotating = false;
 static int numBoxes = 1;				// Debug: set numBoxes to 1.
 std::vector<glm::mat4> boxTransforms;	// We represent the scene by a single box and a number of transforms for drawing the box at different locations.
 
+// for part 4 animation
+std::vector<glm::vec3> boxRotationAxes;
+std::vector<float> boxRotationSpeeds;
+static bool animateBoxes = false;
+
 // Anaglyph control 
 static float ipd = 2.0f;				// Distance between left/right eye.
 // After you implement the anaglyph, adjust the IPD value to control the red/cyan offsets and depth perception. 
@@ -81,6 +86,8 @@ static glm::vec3 randomVec3() {
 
 static void generateScene() {
 	boxTransforms.clear();
+	boxRotationAxes.clear();
+	boxRotationSpeeds.clear();
 	if (numBoxes == 1) {
 		// Use this for debugging
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
@@ -102,6 +109,9 @@ static void generateScene() {
 			modelMatrix = glm::rotate(modelMatrix, angle, axis);
 			modelMatrix = glm::scale(modelMatrix, scale);
 			boxTransforms.push_back(modelMatrix);
+
+			boxRotationAxes.push_back(axis);
+			boxRotationSpeeds.push_back((0.2f + randomFloat()) * 0.8f); // radians/sec
 		}
 	}
 }
@@ -187,8 +197,7 @@ int main(void)
 	{
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// TODO: Render anaglyph 
-		// --------------------------------------------------------------------
+		// Render anaglyph 
 
 		if (anaglyphMode == None) {
 			// Clear the screen
@@ -211,11 +220,10 @@ int main(void)
 
 			if (anaglyphMode == ToeIn) {
 
-				// TODO: Implement the toe-in projection here
-				// ------------------------------------------------------------
+				// Toe-in projection here
 
 				// Left eye: offset the eye position to the left by ipd/2
-				glm::vec3 eyeLeft = eyeCenter - glm::vec3(ipd/2.0f, 0.0f, 0.0f);
+				glm::vec3 eyeLeft = eyeCenter - glm::vec3(ipd / 2.0f, 0.0f, 0.0f);
 				glm::mat4 viewMatrixLeft = glm::lookAt(eyeLeft, lookat, up);
 				vpLeft = projectionMatrix * viewMatrixLeft;
 
@@ -226,28 +234,41 @@ int main(void)
 
 			} else if (anaglyphMode == Asymmetric) {	
 
-				// TODO: Implement the asymmetric view frustum here
-				// ------------------------------------------------------------
+				// Asymmetric view frustum here
+				
+				glm::vec3 forward = glm::normalize(lookat - eyeCenter);
+				glm::vec3 right = glm::normalize(glm::cross(forward, up));
 
-				float aspect = (float)windowWidth / windowHeight;
-				float halfH = zNear * tan(glm::radians(FoV/2.0f));
-				float halfW = aspect * halfH;
-				glm::mat4 viewMatrix = glm::lookAt(eyeCenter, lookat, up);
+				// Left eye orientation
+				glm::vec3 eyeLeft = eyeCenter - right * (ipd / 2.0f);
+				glm::mat4 viewMatrixLeft = glm::lookAt(eyeLeft, eyeLeft + forward, up);
 
-				// Left eye
-				float left = -halfW + ipd / 2.0f;
-				float right = halfW + ipd / 2.0f;
-				vpLeft = glm::frustum(left, right, -halfH, halfH, zNear, zFar) * viewMatrix;
+				// Right eye orientation
+				glm::vec3 eyeRight = eyeCenter + right * (ipd / 2.0f);
+				glm::mat4 viewMatrixRight = glm::lookAt(eyeRight, eyeRight + forward, up);
 
-				// Right eye
-				left = -halfW - ipd / 2.0f;
-				right = halfW - ipd / 2.0f;
-				vpRight = glm::frustum(left, right, -halfH, halfH, zNear, zFar) * viewMatrix;
+				// Symmetric frustum parameters
+				float aspect = (float)windowWidth / (float)windowHeight;
+				float top = zNear * tanf(glm::radians(FoV) / 2.0f);
+				float bottom = -top;
 
+				// Calculate frustum shift
+				float shift = (ipd / 2.0f) * zNear / glm::length(lookat - eyeCenter);
+
+				// Left eye frustum
+				float leftL = -aspect * top + shift; // - near * (w - ipd) / 2d
+				float rightL = aspect * top + shift; // near * (w + ipd) / 2d
+				glm::mat4 projectionMatrixLeft = glm::frustum(leftL, rightL, bottom, top, zNear, zFar);
+				vpLeft = projectionMatrixLeft * viewMatrixLeft;
+
+				// Right eye frustum
+				float leftR = -aspect * top - shift; // - near * (w + ipd) / 2d
+				float rightR = aspect * top - shift; // near * (w - ipd) / 2d
+				glm::mat4 projectionMatrixRight = glm::frustum(leftR, rightR, bottom, top, zNear, zFar);
+				vpRight = projectionMatrixRight * viewMatrixRight;
 			}
 
-			// TODO: Implement two-pass rendering to draw the anaglyph
-			// ----------------------------------------------------------------
+			// Two-pass rendering to draw the anaglyph
 
 			glClear(GL_COLOR_BUFFER_BIT); // Clear all color channels
 
@@ -284,6 +305,16 @@ int main(void)
 			eyeCenter.x = viewDistance * cos(viewAzimuth);
 			eyeCenter.z = viewDistance * sin(viewAzimuth);
 		}
+
+		// Rotate boxes for Part 4
+		if (numBoxes > 1 && animateBoxes) {
+			for (int i = 0; i < numBoxes; ++i) {
+				boxTransforms[i] = 
+					glm::rotate(boxTransforms[i], 
+								boxRotationSpeeds[i] * deltaTime, 
+								boxRotationAxes[i]);
+			}
+		}		
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -349,6 +380,13 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         nextAnaglyphMode(); 
 		printAnaglyphMode();
 	}
+
+	// for part 4 animation
+	if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+		animateBoxes = !animateBoxes;
+		std::cout << "Box animation: " << (animateBoxes ? "ON" : "OFF") << std::endl;
+	}
+
 
 	// Adjust the IPD value to match your actual viewing distance
 	// Special case: IPD == 0 means no 3D effect.
