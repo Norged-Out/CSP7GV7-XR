@@ -97,7 +97,7 @@ static void generateScene() {
 			float angle = randomFloat() * M_PI * 2;
 			glm::vec3 axis = glm::normalize(randomVec3() - 0.5f);
 
-			glm::mat4 modelMatrix = glm::mat4();
+			glm::mat4 modelMatrix = glm::mat4(1.0f);
 			modelMatrix = glm::translate(modelMatrix, position);
 			modelMatrix = glm::rotate(modelMatrix, angle, axis);
 			modelMatrix = glm::scale(modelMatrix, scale);
@@ -205,7 +205,7 @@ int main(void)
 			}
 
 		} else {
-			
+			// Declare left and right eye view-projection matrices
 			glm::mat4 vpLeft;
 			glm::mat4 vpRight;
 
@@ -214,17 +214,61 @@ int main(void)
 				// TODO: Implement the toe-in projection here
 				// ------------------------------------------------------------
 
+				// Left eye: offset the eye position to the left by ipd/2
+				glm::vec3 eyeLeft = eyeCenter - glm::vec3(ipd/2.0f, 0.0f, 0.0f);
+				glm::mat4 viewMatrixLeft = glm::lookAt(eyeLeft, lookat, up);
+				vpLeft = projectionMatrix * viewMatrixLeft;
+
+				// Right eye: offset the eye position to the right by ipd/2
+				glm::vec3 eyeRight = eyeCenter + glm::vec3(ipd / 2.0f, 0.0f, 0.0f);
+				glm::mat4 viewMatrixRight = glm::lookAt(eyeRight, lookat, up);
+				vpRight = projectionMatrix * viewMatrixRight;
 
 			} else if (anaglyphMode == Asymmetric) {	
 
 				// TODO: Implement the asymmetric view frustum here
 				// ------------------------------------------------------------
 
+				float aspect = (float)windowWidth / windowHeight;
+				float halfH = zNear * tan(glm::radians(FoV/2.0f));
+				float halfW = aspect * halfH;
+				glm::mat4 viewMatrix = glm::lookAt(eyeCenter, lookat, up);
+
+				// Left eye
+				float left = -halfW + ipd / 2.0f;
+				float right = halfW + ipd / 2.0f;
+				vpLeft = glm::frustum(left, right, -halfH, halfH, zNear, zFar) * viewMatrix;
+
+				// Right eye
+				left = -halfW - ipd / 2.0f;
+				right = halfW - ipd / 2.0f;
+				vpRight = glm::frustum(left, right, -halfH, halfH, zNear, zFar) * viewMatrix;
+
 			}
 
 			// TODO: Implement two-pass rendering to draw the anaglyph
 			// ----------------------------------------------------------------
+
+			glClear(GL_COLOR_BUFFER_BIT); // Clear all color channels
+
+			// Left eye pass (red channel)
+			glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE); // R only
+			glClear(GL_DEPTH_BUFFER_BIT);
+			// Draw the boxes for the left eye
+			for (int i = 0; i < numBoxes; ++i) {
+				box.render(vpLeft, boxTransforms[i]);
+			}
+
+			// Right eye pass (cyan channel)
+			glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_FALSE); // G and B only
+			glClear(GL_DEPTH_BUFFER_BIT);
+			// Draw the boxes for the right eye
+			for (int i = 0; i < numBoxes; ++i) {
+				box.render(vpRight, boxTransforms[i]);
+			}
 			
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);  // Reset all channels
+
 		}
 
 		// --------------------------------------------------------------------

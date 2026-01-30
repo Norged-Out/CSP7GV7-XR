@@ -52,7 +52,7 @@
               "RelativeDocumentMoniker": "anaglyph.cpp",
               "ToolTip": "C:\\Users\\Pri\\Documents\\GitHub\\CSP7GV7-XR\\Lab2_Anaglyph\\anaglyph.cpp",
               "RelativeToolTip": "anaglyph.cpp",
-              "ViewState": "AgIAAFYAAAAAAAAAAAAAAFUAAAAoAAAAAAAAAA==",
+              "ViewState": "AgIAAFIAAAAAAAAAAAAAAFYAAABAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2026-01-30T11:29:41.072Z",
               "IsPinned": true,
@@ -69,8 +69,7 @@
               "ViewState": "AgIAAJAAAAAAAAAAAAAAAMYAAAAbAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
               "WhenOpened": "2026-01-30T11:31:25.075Z",
-              "IsPinned": true,
-              "EditorCaption": ""
+              "IsPinned": true
             },
             {
               "$type": "Document",
@@ -82,8 +81,7 @@
               "RelativeToolTip": "box.vert",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-01-30T11:38:41.592Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:38:41.592Z"
             },
             {
               "$type": "Document",
@@ -95,8 +93,7 @@
               "RelativeToolTip": "box.frag",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-01-30T11:37:54.762Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:37:54.762Z"
             },
             {
               "$type": "Document",
@@ -108,8 +105,7 @@
               "RelativeToolTip": "render\\shader.cpp",
               "ViewState": "AgIAABsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2026-01-30T11:32:30.485Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:32:30.485Z"
             },
             {
               "$type": "Document",
@@ -121,8 +117,7 @@
               "RelativeToolTip": "render\\texture.cpp",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2026-01-30T11:32:10.439Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:32:10.439Z"
             },
             {
               "$type": "Document",
@@ -134,8 +129,7 @@
               "RelativeToolTip": "render\\texture.h",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAATAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
-              "WhenOpened": "2026-01-30T11:31:39.121Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:31:39.121Z"
             },
             {
               "$type": "Document",
@@ -147,8 +141,7 @@
               "RelativeToolTip": "render\\shader.h",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAATAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
-              "WhenOpened": "2026-01-30T11:31:34.48Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-30T11:31:34.48Z"
             }
           ]
         }
