@@ -1,0 +1,9 @@
+﻿  anaglyph.cpp
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(34,26): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(35,24): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(97,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(210,14): warning C4101: 'vpRight': unreferenced local variable
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(209,14): warning C4101: 'vpLeft': unreferenced local variable
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(274,22): warning C4305: '=': truncation from 'double' to 'float'
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(275,20): warning C4305: '=': truncation from 'double' to 'float'
+  Lab2_Anaglyph.vcxproj -> C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\x64\Debug\Lab2_Anaglyph.exe
