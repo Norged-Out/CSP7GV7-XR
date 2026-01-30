@@ -1,0 +1,13 @@
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+
+# Build output
+x64/
+Debug/
+Release/
+
+# Executables
+*.exe
+*.enc
