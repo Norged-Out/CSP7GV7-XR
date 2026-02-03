@@ -21,7 +21,7 @@ static void cursor_position_callback(GLFWwindow* window, double xpos, double ypo
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
 // OpenGL camera view parameters
-static glm::vec3 originalEyeCenter(0, 0, 150);
+static glm::vec3 originalEyeCenter(0, 0, 100);
 
 static glm::vec3 eyeCenter = originalEyeCenter;
 static glm::vec3 lookat(0, 0, 0);
@@ -34,7 +34,7 @@ static glm::float32 zFar = 1000.0f;
 // View control 
 static float viewAzimuth = M_PI / 2;
 static float viewPolar = M_PI / 2;
-static float viewDistance = 150.0f;
+static float viewDistance = 100.0f;
 static bool rotating = false;
 static glm::mat4 projectionMatrix;
 
@@ -242,6 +242,7 @@ int main(void)
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
+	glfwSwapInterval(1); // Enable vsync
 
 	// Ensure we can capture the escape key being pressed below
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
@@ -557,6 +558,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 	// for Part 4: Black Hole
 	if (key == GLFW_KEY_A) {
 		sceneMode = SceneMode::BlackHole;
+		eyeCenter = glm::vec3(0, 0, 150);
 		std::cout << "Black Hole mode activated" << std::endl;
 		generateScene();
 	}

@@ -2,6 +2,6 @@
 C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(35,26): warning C4305: 'initializing': truncation from 'double' to 'float'
 C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(36,24): warning C4305: 'initializing': truncation from 'double' to 'float'
 C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(131,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(500,22): warning C4305: '=': truncation from 'double' to 'float'
-C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(501,20): warning C4305: '=': truncation from 'double' to 'float'
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(499,22): warning C4305: '=': truncation from 'double' to 'float'
+C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\anaglyph.cpp(500,20): warning C4305: '=': truncation from 'double' to 'float'
   Lab2_Anaglyph.vcxproj -> C:\Users\Pri\Documents\GitHub\CSP7GV7-XR\Lab2_Anaglyph\x64\Debug\Lab2_Anaglyph.exe
