@@ -1,4 +1,4 @@
-#include <glad/glad.h>
+#include <glad/glad.h> // switched from gl.h to glad.h
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -18,9 +18,10 @@ static int windowHeight = 768;
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
 static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
+static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
 // OpenGL camera view parameters
-static glm::vec3 originalEyeCenter(0, 0, 100);
+static glm::vec3 originalEyeCenter(0, 0, 150);
 
 static glm::vec3 eyeCenter = originalEyeCenter;
 static glm::vec3 lookat(0, 0, 0);
@@ -33,17 +34,35 @@ static glm::float32 zFar = 1000.0f;
 // View control 
 static float viewAzimuth = M_PI / 2;
 static float viewPolar = M_PI / 2;
-static float viewDistance = 100.0f;
+static float viewDistance = 150.0f;
 static bool rotating = false;
+static glm::mat4 projectionMatrix;
+
 
 // Scene control 
 static int numBoxes = 1;				// Debug: set numBoxes to 1.
 std::vector<glm::mat4> boxTransforms;	// We represent the scene by a single box and a number of transforms for drawing the box at different locations.
 
-// for part 4 animation
-std::vector<glm::vec3> boxRotationAxes;
-std::vector<float> boxRotationSpeeds;
-static bool animateBoxes = false;
+// for Part 4: Black Hole
+
+static float bhInnerRadius = 8.0f;   // event horizon-ish
+static float bhOuterRadius = 200.0f; // spawn ring-ish
+static float bhMinRadius = 40.0f;  // initial min spawn radius
+static float bhMaxHeight = 50.0f;  // vertical spread
+
+static float bhBaseAngSpeed = 1.6f;  // base orbital speed
+static float bhBaseFallSpeed = 6.0f; // base inward drift
+
+// Per-particle state
+static std::vector<float> bhAngle;
+static std::vector<float> bhRadius;
+static std::vector<float> bhAngSpeed;
+static std::vector<float> bhFallSpeed;
+static std::vector<float> bhHeight;
+static std::vector<float> bhYSpeed;
+static std::vector<float> bhSpinSpeed;
+static std::vector<float> bhScale;
+static std::vector<glm::vec3> bhSpinAxis;
 
 // Anaglyph control 
 static float ipd = 2.0f;				// Distance between left/right eye.
@@ -64,6 +83,14 @@ static std::string strAnaglyphMode[] = {
 };
 
 static AnaglyphMode anaglyphMode = AnaglyphMode::None;
+
+enum SceneMode {
+	Debug,
+	RandomBoxes,
+	BlackHole,
+};
+
+static SceneMode sceneMode = SceneMode::Debug;
 
 // Helper functions 
 
@@ -86,18 +113,18 @@ static glm::vec3 randomVec3() {
 
 static void generateScene() {
 	boxTransforms.clear();
-	boxRotationAxes.clear();
-	boxRotationSpeeds.clear();
-	if (numBoxes == 1) {
+	//boxRotationAxes.clear();
+	//boxRotationSpeeds.clear();
+	if (sceneMode == SceneMode::Debug) {
 		// Use this for debugging
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
 		modelMatrix = glm::translate(modelMatrix, glm::vec3(0, 0, 0));
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(16, 16, 16));
 		boxTransforms.push_back(modelMatrix);
-	} else {
+	} else if (sceneMode == SceneMode::RandomBoxes) {
 		// Generate boxes based on random position, rotation, and scale. 
 		// Store their transforms.
-		for (int i = 0; i < numBoxes; ++i) {
+		for (int i = 0; i < 100; ++i) {
 			glm::vec3 position = 100.0f * (randomVec3() - 0.5f);
 			float s = (1 + (randomInt() % 4)) * 1.0f;
 			glm::vec3 scale(s, s, s);
@@ -109,11 +136,69 @@ static void generateScene() {
 			modelMatrix = glm::rotate(modelMatrix, angle, axis);
 			modelMatrix = glm::scale(modelMatrix, scale);
 			boxTransforms.push_back(modelMatrix);
-
-			boxRotationAxes.push_back(axis);
-			boxRotationSpeeds.push_back((0.2f + randomFloat()) * 0.8f); // radians/sec
 		}
 	}
+	else if (sceneMode == SceneMode::BlackHole) {
+		int particleCount = 100;
+		boxTransforms.resize(particleCount + 1);
+
+		// Resize particle state arrays
+		bhAngle.resize(particleCount);
+		bhRadius.resize(particleCount);
+		bhAngSpeed.resize(particleCount);
+		bhFallSpeed.resize(particleCount);
+		bhHeight.resize(particleCount);
+		bhYSpeed.resize(particleCount);
+		bhSpinSpeed.resize(particleCount);
+		bhScale.resize(particleCount);
+		bhSpinAxis.resize(particleCount);
+
+		// Black hole cube at origin (index 0)
+		{
+			glm::mat4 modelMatrix(1.0f);
+			modelMatrix = glm::translate(modelMatrix, glm::vec3(0, 0, 0));
+			modelMatrix = glm::scale(modelMatrix, glm::vec3(15, 15, 15));
+			boxTransforms[0] = modelMatrix;
+		}
+
+		for (int i = 0; i < particleCount; ++i) {
+			float angle = randomFloat() * (float)(2.0 * M_PI);
+
+			// spawn radius (biased outward)
+			float radius = bhMinRadius + (bhOuterRadius - bhMinRadius) * (0.35f + 0.65f * randomFloat());
+			float height = (randomFloat() * 2.0f - 1.0f) * bhMaxHeight;
+
+			// faster nearer center
+			float chaos = 0.4f + 1.6f * randomFloat();
+			float angSpd = bhBaseAngSpeed * sqrt(bhOuterRadius / radius);
+			float fallSpd = bhBaseFallSpeed * (0.35f + 0.65f * randomFloat());
+			float ySpd = (randomFloat() * 2.0f - 1.0f) * 2.0f;
+			float scale = 0.8f + 2.5f * (radius / bhOuterRadius);
+			float direction = (randomFloat() < 0.5f) ? -1.0f : 1.0f;
+
+			bhAngle[i] = angle;
+			bhRadius[i] = radius;
+			bhHeight[i] = height;
+			bhAngSpeed[i] = angSpd * chaos * direction;
+			bhFallSpeed[i] = fallSpd * chaos;
+			bhYSpeed[i] = ySpd;
+			bhScale[i] = scale;
+
+			bhSpinAxis[i] = glm::normalize(randomVec3() - 0.5f);
+			bhSpinSpeed[i] = 0.8f + 2.5f * randomFloat();
+
+			float x = cosf(angle) * radius;
+			float z = sinf(angle) * radius;
+
+			glm::mat4 modelMatrix(1.0f);
+			modelMatrix = glm::translate(modelMatrix, glm::vec3(x, height, z));
+			modelMatrix = glm::rotate(modelMatrix, angle, glm::vec3(0, 1, 0));
+			modelMatrix = glm::rotate(modelMatrix, randomFloat() * (float)(2.0 * M_PI), bhSpinAxis[i]);
+			modelMatrix = glm::scale(modelMatrix, glm::vec3(scale));
+			boxTransforms[i + 1] = modelMatrix;
+		}
+	}
+
 }
 
 // Debugging functions 
@@ -165,6 +250,9 @@ int main(void)
 	// Ensure we can capture mouse cursor movement 
 	glfwSetCursorPosCallback(window, cursor_position_callback);
 
+	// Allow window resizing
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
 	// Load OpenGL functions, gladLoadGL returns the loaded version, 0 on error.
 	int version = gladLoadGL();
 	if (version == 0)
@@ -189,7 +277,7 @@ int main(void)
 	generateScene();
 
 	// Set a perspective camera 
-	glm::mat4 projectionMatrix = glm::perspective(glm::radians(FoV), (float)windowWidth / windowHeight, zNear, zFar);
+	projectionMatrix = glm::perspective(glm::radians(FoV), (float)windowWidth / windowHeight, zNear, zFar);
 
 	printAnaglyphMode();
 
@@ -209,7 +297,7 @@ int main(void)
 			glm::mat4 vp = projectionMatrix * viewMatrix;
 			
 			// Draw 
-			for (int i = 0; i < numBoxes; ++i) {
+			for (int i = 0; i < boxTransforms.size(); ++i) {
 				box.render(vp, boxTransforms[i]);
 			}
 
@@ -219,7 +307,6 @@ int main(void)
 			glm::mat4 vpRight;
 
 			if (anaglyphMode == ToeIn) {
-
 				// Toe-in projection here
 
 				// Left eye: offset the eye position to the left by ipd/2
@@ -232,8 +319,7 @@ int main(void)
 				glm::mat4 viewMatrixRight = glm::lookAt(eyeRight, lookat, up);
 				vpRight = projectionMatrix * viewMatrixRight;
 
-			} else if (anaglyphMode == Asymmetric) {	
-
+			} else if (anaglyphMode == Asymmetric) {
 				// Asymmetric view frustum here
 				
 				glm::vec3 forward = glm::normalize(lookat - eyeCenter);
@@ -276,7 +362,7 @@ int main(void)
 			glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE); // R only
 			glClear(GL_DEPTH_BUFFER_BIT);
 			// Draw the boxes for the left eye
-			for (int i = 0; i < numBoxes; ++i) {
+			for (int i = 0; i < boxTransforms.size(); ++i) {
 				box.render(vpLeft, boxTransforms[i]);
 			}
 
@@ -284,7 +370,7 @@ int main(void)
 			glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_FALSE); // G and B only
 			glClear(GL_DEPTH_BUFFER_BIT);
 			// Draw the boxes for the right eye
-			for (int i = 0; i < numBoxes; ++i) {
+			for (int i = 0; i < boxTransforms.size(); ++i) {
 				box.render(vpRight, boxTransforms[i]);
 			}
 			
@@ -305,16 +391,79 @@ int main(void)
 			eyeCenter.x = viewDistance * cos(viewAzimuth);
 			eyeCenter.z = viewDistance * sin(viewAzimuth);
 		}
+		
+		// Black hole animation update
+		if (sceneMode == SceneMode::BlackHole && boxTransforms.size() > 1) {
+			int particleCount = (int)boxTransforms.size() - 1;
 
-		// Rotate boxes for Part 4
-		if (numBoxes > 1 && animateBoxes) {
-			for (int i = 0; i < numBoxes; ++i) {
-				boxTransforms[i] = 
-					glm::rotate(boxTransforms[i], 
-								boxRotationSpeeds[i] * deltaTime, 
-								boxRotationAxes[i]);
+			// Rotate black hole cube slowly
+			glm::mat4 modelMatrix(1.0f);
+			modelMatrix = glm::rotate(modelMatrix, (float)currentTime * 0.3f, glm::vec3(1, 1, 1));
+			modelMatrix = glm::scale(modelMatrix, glm::vec3(15, 15, 15));
+			boxTransforms[0] = modelMatrix;
+
+			for (int i = 0; i < particleCount; ++i) {
+				// Orbital motion
+				bhAngle[i] += bhAngSpeed[i] * deltaTime * (1.0f + 2.0f / std::max(bhRadius[i], 20.0f));
+				// Vertical bobbing
+				float wobble = sinf((float)currentTime * 0.7f + i) * 0.2f;
+				bhAngle[i] += wobble * deltaTime;
+				// Radial pull inward
+				float pull = 1.0f + 40.0f / std::max(bhRadius[i], 20.0f);
+				bhRadius[i] -= bhFallSpeed[i] * pull * deltaTime;
+
+				// Vertical drift
+				bhHeight[i] += bhYSpeed[i] * deltaTime;
+				if (bhHeight[i] > bhMaxHeight) { bhHeight[i] = bhMaxHeight; bhYSpeed[i] *= -1.0f; }
+				if (bhHeight[i] < -bhMaxHeight) { bhHeight[i] = -bhMaxHeight; bhYSpeed[i] *= -1.0f; }
+
+				// Event horizon: respawn
+				if (bhRadius[i] < bhInnerRadius) {
+					// Reposition
+					bhAngle[i] = randomFloat() * (float)(2.0 * M_PI);
+					bhRadius[i] = bhMinRadius + (bhOuterRadius - bhMinRadius) * (0.4f + 0.3f * randomFloat());
+					bhHeight[i] = (randomFloat() * 2.0f - 1.0f) * bhMaxHeight;
+					float chaos = 0.4f + 1.6f * randomFloat();
+
+					// Re-roll orbital speeds
+					float direction = (randomFloat() < 0.5f) ? -1.0f : 1.0f;
+					bhAngSpeed[i] = bhBaseAngSpeed * sqrt(bhOuterRadius / bhRadius[i]) * chaos * direction;
+
+					// Radial + vertical speeds
+					bhFallSpeed[i] = bhBaseFallSpeed * (0.35f + 0.65f * randomFloat()) * chaos;
+					bhYSpeed[i] = (randomFloat() * 2.0f - 1.0f) * 2.0f;
+
+					// Visuals
+					bhSpinAxis[i] = glm::normalize(randomVec3() - 0.5f);
+					bhSpinSpeed[i] = 0.8f + 2.5f * randomFloat();
+				}
+
+				// Occasional energy injection
+				if (randomFloat() < 0.2f * deltaTime) {
+					bhRadius[i] *= 0.5f;
+				}
+
+				// Reposition the particle
+				float x = cosf(bhAngle[i]) * bhRadius[i];
+				float z = sinf(bhAngle[i]) * bhRadius[i];
+
+				// Tidal stretching (increases toward center)
+				float baseScale = 0.5f + 2.5f * (bhRadius[i] / bhOuterRadius);
+				float t = glm::clamp(1.0f - (bhRadius[i] / bhOuterRadius), 0.0f, 1.0f);
+				float sx = baseScale * (1.0f + t * 1.5f);
+				float sy = baseScale * (1.0f - t * 0.5f);
+				float sz = baseScale * (1.0f + t * 1.5f);
+
+				// Update transform
+				glm::mat4 modelMatrix(1.0f);
+				modelMatrix = glm::translate(modelMatrix, glm::vec3(x, bhHeight[i], z));
+				modelMatrix = glm::rotate(modelMatrix, bhAngle[i], glm::vec3(1, 1, 1));
+				modelMatrix = glm::rotate(modelMatrix, (float)currentTime * bhSpinSpeed[i], bhSpinAxis[i]);
+				modelMatrix = glm::scale(modelMatrix, glm::vec3(sx, sy, sz));
+				boxTransforms[i + 1] = modelMatrix;
 			}
-		}		
+		}
+
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -381,13 +530,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 		printAnaglyphMode();
 	}
 
-	// for part 4 animation
-	if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-		animateBoxes = !animateBoxes;
-		std::cout << "Box animation: " << (animateBoxes ? "ON" : "OFF") << std::endl;
-	}
-
-
 	// Adjust the IPD value to match your actual viewing distance
 	// Special case: IPD == 0 means no 3D effect.
 
@@ -403,12 +545,19 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 	}
 
 	if (key == GLFW_KEY_1) {
-		numBoxes = 1;
+		sceneMode = SceneMode::Debug;
 		generateScene();
 	}
 
 	if (key == GLFW_KEY_0) {
-		numBoxes = 100;
+		sceneMode = SceneMode::RandomBoxes;
+		generateScene();
+	}
+
+	// for Part 4: Black Hole
+	if (key == GLFW_KEY_A) {
+		sceneMode = SceneMode::BlackHole;
+		std::cout << "Black Hole mode activated" << std::endl;
 		generateScene();
 	}
 
@@ -418,4 +567,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
 	// Optionally, you can implement your own mouse support.
+}
+
+static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+	if (height == 0) return; // avoid divide-by-zero
+	windowWidth = width;
+	windowHeight = height;
+	glViewport(0, 0, width, height);
+	projectionMatrix = glm::perspective(glm::radians(FoV), (float)width / (float)height, zNear,	zFar);
 }
