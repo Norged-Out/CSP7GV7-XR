@@ -1,0 +1,2 @@
+#pragma code_page(65001)
+2 /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ 24 /* RT_MANIFEST */ "C:/Users/Pri/Documents/GitHub/CSP7GV7-XR/lab2_anaglyph/out/build/x64-Debug/external/glfw-3.1.2/src/CMakeFiles/glfw.dir/embed.manifest"
