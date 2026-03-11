@@ -13,10 +13,8 @@ Release/
 *.enc
 
 # stuff
-lab2_results.zip
-lab6_results.zip
+*.zip
 *.mp4
-
-myenv/
- 
+ __pycache__/
+*.pyc
  
