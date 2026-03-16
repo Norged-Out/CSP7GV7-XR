@@ -7,7 +7,7 @@ import numpy as np
 import os
 from array import array
 
-from prediction import predict, get_camera_matrix, get_fov_y, solvepnp
+from prediction import predict, get_camera_matrix, get_fov_y, solvepnp, reproject
 
 
 class CameraAR(mglw.WindowConfig):
@@ -19,7 +19,6 @@ class CameraAR(mglw.WindowConfig):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        print("[DEBUG] CameraAR init start")
 
         # Shader for rendering 3D objects
         self.prog3d = self.ctx.program(
@@ -73,11 +72,8 @@ class CameraAR(mglw.WindowConfig):
         self.withTexture = self.prog3d['withTexture']
 
         # Load the 3D virtual object, and the marker for hand landmarks
-        print("[DEBUG] loading cube")
         self.scene_cube = self.load_scene('crate.obj')
-        print("[DEBUG] loading marker")
         self.scene_marker = self.load_scene('marker.obj')
-        print("[DEBUG] scenes loaded")
 
         # Extract the VAOs from the scene
         self.vao_cube = self.scene_cube.root_nodes[0].mesh.vao.instance(self.prog3d)
@@ -98,10 +94,10 @@ class CameraAR(mglw.WindowConfig):
         --------------------------------------------------------------------
         """
         vertices = np.array([
-            -1.0, -1.0, 0.0,    0.0, 0.0, 1.0,   0.0, 0.0,
-             1.0, -1.0, 0.0,    0.0, 0.0, 1.0,   1.0, 0.0,
-            -1.0,  1.0, 0.0,    0.0, 0.0, 1.0,   0.0, 1.0,
-             1.0,  1.0, 0.0,    0.0, 0.0, 1.0,   1.0, 1.0,
+            -1.0, -1.0, 0.0,    0.0, 0.0, 1.0,   0.0, 1.0,
+             1.0, -1.0, 0.0,    0.0, 0.0, 1.0,   1.0, 1.0,
+            -1.0,  1.0, 0.0,    0.0, 0.0, 1.0,   0.0, 0.0,
+             1.0,  1.0, 0.0,    0.0, 0.0, 1.0,   1.0, 0.0,
         ], dtype='f4')
 
         self.vbo = self.ctx.buffer(vertices.tobytes())
@@ -120,9 +116,9 @@ class CameraAR(mglw.WindowConfig):
         print("[DEBUG] Window size set to:", self.window_size)
 
     def render(self, time: float, frame_time: float):
-        print("[DEBUG] render() running")
         self.ctx.clear(1.0, 1.0, 1.0)
-        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
+        
+        self.ctx.disable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
 
         """
         ---------------------------------------------------------------
@@ -134,15 +130,25 @@ class CameraAR(mglw.WindowConfig):
         ret, frame = self.capture.read()
         if not ret:
             return
-        print("[DEBUG] frame captured:", ret)
         # flip and convert to rgb
         frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
         # upload as texture
-        frame_tex = self.ctx.texture(frame.shape[1::-1], 3, frame.tobytes())
-        frame_tex.use()
-        print("[DEBUG] rendering quad")
+        if not hasattr(self, "frame_tex"):
+            self.frame_tex = self.ctx.texture(frame.shape[1::-1], 3)
+        self.frame_tex.write(frame.tobytes())
+        self.frame_tex.use()
+
+        identity = Matrix44.identity()  # screen-space fullscreen
+        self.prog3d['Mvp'].write(identity.astype('f4'))
+        self.prog3d['Color'].value = (1.0, 1.0, 1.0)
+        self.prog3d['Light'].value = (0.0, 0.0, 100.0)
+        self.prog3d['withTexture'].value = True
+        
         self.quad.render(moderngl.TRIANGLE_STRIP)
+        
+        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
         
         """
         ---------------------------------------------------------------
@@ -154,6 +160,7 @@ class CameraAR(mglw.WindowConfig):
         
         # Solve the landmarks in world space
         world_landmarks_list = []
+        converted_world_landmarks = []
         
         # OpenCV to OpenGL conversion
         # The world points from OpenCV need some changes to be OpenGL ready. 
@@ -163,6 +170,26 @@ class CameraAR(mglw.WindowConfig):
         # Second, the OpenCV and OpenGL camera coordinate system are different. # OpenCV: right x, down y, into screen z. Image: right x, down y.  
         # OpenGL: right x, up y, out of screen z. Image: right x, up y.
         # Check for image and 3D points flip to make sure the points are properly converted. 
+
+        # Get frame dimensions for camera matrix
+        frame_height, frame_width = frame.shape[:2]
+        camera_matrix = get_camera_matrix(frame_width, frame_height)
+
+        # Hand detection
+        detection_result = predict(frame)
+        if detection_result and detection_result.hand_landmarks and len(detection_result.hand_landmarks) > 0:
+            model_landmarks_list = detection_result.hand_world_landmarks
+            image_landmarks_list = detection_result.hand_landmarks
+            world_landmarks_list = solvepnp(model_landmarks_list, 
+                image_landmarks_list, camera_matrix, frame_width, frame_height)
+
+            # convert OpenCV to OpenGL coordinates
+            for hand_landmarks in world_landmarks_list:
+                pts = np.array(hand_landmarks)
+                pts *= 100 # m to cm
+                pts[:,1] *= -1  # flip Y axis
+                pts[:,2] *= -1 # flip Z axis
+                converted_world_landmarks.append(pts)
         
         """
         ----------------------------------------------------------------------
@@ -174,7 +201,22 @@ class CameraAR(mglw.WindowConfig):
         """
         grabbed = False
         # It is recommended to work on this task last after all landmarks are in place.
-        
+        if detection_result and detection_result.hand_landmarks:
+            for hand_landmarks in converted_world_landmarks:
+                thumb_tip = hand_landmarks[4]
+                index_tip = hand_landmarks[8]
+                # pinch detection
+                pinch_distance = np.linalg.norm(index_tip - thumb_tip)
+                is_pinch = pinch_distance < 3.0 
+                # cube hit detection
+                cube_to_tip = np.linalg.norm(index_tip - self.object_pos)
+                is_hit = cube_to_tip < 4.0
+
+                grabbed = is_pinch and is_hit
+                if grabbed:
+                    self.object_pos = index_tip.copy()
+                    print(f"[DEBUG] Grabbed! Pinch={pinch_distance:.2f}cm  Dist={cube_to_tip:.2f}cm")
+                    break
         
         """
         ----------------------------------------------------------------------
@@ -185,8 +227,8 @@ class CameraAR(mglw.WindowConfig):
         # Note we have to set the OpenGL projection matrix by following parameters from the OpenCV camera matrix, i.e., the field of view.
         # You can use Matrix44.perspective_projection function, and set the parameters accordingly. Note that the fov must be computed based on the camera matrix. See prediction.py. 
         
-        # In this example, a random FOV value is set. Do not use this value in your final program. 
-        proj = Matrix44.perspective_projection(45, self.aspect_ratio, 0.1, 1000)
+        fov_y = get_fov_y(camera_matrix, frame_height) # Use real camera FOV
+        proj = Matrix44.perspective_projection(fov_y, self.aspect_ratio, 0.1, 1000.0)
         
         # Translate the object to its position 
         translate = Matrix44.from_translation(self.object_pos)
@@ -210,7 +252,43 @@ class CameraAR(mglw.WindowConfig):
         self.vao_cube.render()
         
         # Render the landmarks
-        # ...
+        for hand_landmarks in converted_world_landmarks:
+            for pos in hand_landmarks:
+                scale = Matrix44.from_scale([0.3, 0.3, 0.3])
+                translate = Matrix44.from_translation(pos)
+                marker_mvp = proj * translate * scale
+                
+                self.color.value = (0.0, 1.0, 0.0)
+                self.light.value = (10.0, 10.0, 10.0)
+                self.mvp.write(marker_mvp.astype('f4'))
+                self.withTexture.value = False
+                
+                self.vao_marker.render()
+
+        # Render 2D landmarks for sanity check
+        # if detection_result and detection_result.hand_landmarks:
+        #     for hand_landmarks in image_landmarks_list:
+        #         for l in hand_landmarks:
+        #             x = (l.x * 2.0) - 1.0
+        #             y = 1.0 - (l.y * 2.0)
+        #             pos = np.array([x * 30, y * 30, -30])
+        #             scale = Matrix44.from_scale([0.2, 0.2, 0.2])
+        #             translate = Matrix44.from_translation(pos)
+        #             marker_mvp = proj * translate * scale
+
+        #             self.color.value = (1.0, 0.0, 0.0)
+        #             self.withTexture.value = False
+        #             self.mvp.write(marker_mvp.astype('f4'))
+
+        #             self.vao_marker.render()
+
+    def on_render(self, time, frame_time):
+        # wrap render, cuz version 3.1.1 calls this instead
+        self.render(time, frame_time)
+
+    def close(self):
+        if self.capture:
+            self.capture.release()
 
 
 if __name__ == '__main__':
