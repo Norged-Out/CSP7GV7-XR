@@ -200,22 +200,20 @@ class CameraAR(mglw.WindowConfig):
         ----------------------------------------------------------------------
         """
         grabbed = False
-        # It is recommended to work on this task last after all landmarks are in place.
-        if detection_result and detection_result.hand_landmarks:
+        if converted_world_landmarks:
             for hand_landmarks in converted_world_landmarks:
                 thumb_tip = hand_landmarks[4]
                 index_tip = hand_landmarks[8]
                 # pinch detection
                 pinch_distance = np.linalg.norm(index_tip - thumb_tip)
-                is_pinch = pinch_distance < 3.0 
+                is_pinch = pinch_distance < 5.0 
                 # cube hit detection
                 cube_to_tip = np.linalg.norm(index_tip - self.object_pos)
-                is_hit = cube_to_tip < 4.0
+                is_hit = cube_to_tip < 5.0
 
                 grabbed = is_pinch and is_hit
                 if grabbed:
                     self.object_pos = index_tip.copy()
-                    print(f"[DEBUG] Grabbed! Pinch={pinch_distance:.2f}cm  Dist={cube_to_tip:.2f}cm")
                     break
         
         """
