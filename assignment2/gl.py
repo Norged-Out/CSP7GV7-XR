@@ -7,7 +7,7 @@ import numpy as np
 import os
 from array import array
 
-from prediction import predict, get_camera_matrix, get_fov_y, solvepnp, reproject
+from prediction import predict, get_camera_matrix, get_fov_y, solvepnp
 
 
 class CameraAR(mglw.WindowConfig):
@@ -110,9 +110,13 @@ class CameraAR(mglw.WindowConfig):
         # Get a frame to set the window size and aspect ratio
         ret, frame = self.capture.read() 
         print("[DEBUG] Camera read:", ret)
+        if not ret or frame is None:
+            raise RuntimeError("Failed to read an initial frame from the camera.")
         self.aspect_ratio = float(frame.shape[1]) / frame.shape[0]
         print("[DEBUG] Aspect ratio set to:",  self.aspect_ratio)
         self.window_size = (int(720.0 * self.aspect_ratio), 720)
+        if hasattr(self, "wnd") and self.wnd is not None:
+            self.wnd.size = self.window_size
         print("[DEBUG] Window size set to:", self.window_size)
 
     def render(self, time: float, frame_time: float):
@@ -133,30 +137,18 @@ class CameraAR(mglw.WindowConfig):
         # flip and convert to rgb
         frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # upload as texture
-        if not hasattr(self, "frame_tex"):
-            self.frame_tex = self.ctx.texture(frame.shape[1::-1], 3)
-        self.frame_tex.write(frame.tobytes())
-        self.frame_tex.use()
 
-        identity = Matrix44.identity()  # screen-space fullscreen
-        self.prog3d['Mvp'].write(identity.astype('f4'))
-        self.prog3d['Color'].value = (1.0, 1.0, 1.0)
-        self.prog3d['Light'].value = (0.0, 0.0, 100.0)
-        self.prog3d['withTexture'].value = True
-        
-        self.quad.render(moderngl.TRIANGLE_STRIP)
-        
-        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
-        
-        """
-        ---------------------------------------------------------------
-        TODO: Task 4.
-        Perform hand landmark prediction, and 
-        solve PnP to get world landmarks list.
-        ---------------------------------------------------------------
-        """
+        # Detect hands for debugging 2D points first
+        detection_result = predict(frame)
+        image_landmarks_list = []
+        if detection_result and detection_result.hand_landmarks and len(detection_result.hand_landmarks) > 0:
+            image_landmarks_list = detection_result.hand_landmarks
+            frame_height, frame_width = frame.shape[:2]
+            for hand_landmarks in image_landmarks_list:
+                for l in hand_landmarks:
+                    px = int(l.x * frame_width)
+                    py = int(l.y * frame_height)
+                    cv2.circle(frame, (px, py), 3, (255, 0, 0), 1)
         
         # Solve the landmarks in world space
         world_landmarks_list = []
@@ -176,10 +168,8 @@ class CameraAR(mglw.WindowConfig):
         camera_matrix = get_camera_matrix(frame_width, frame_height)
 
         # Hand detection
-        detection_result = predict(frame)
         if detection_result and detection_result.hand_landmarks and len(detection_result.hand_landmarks) > 0:
             model_landmarks_list = detection_result.hand_world_landmarks
-            image_landmarks_list = detection_result.hand_landmarks
             world_landmarks_list = solvepnp(model_landmarks_list, 
                 image_landmarks_list, camera_matrix, frame_width, frame_height)
 
@@ -200,21 +190,51 @@ class CameraAR(mglw.WindowConfig):
         ----------------------------------------------------------------------
         """
         grabbed = False
+        pinched = False
+        dist_to_object = None
         if converted_world_landmarks:
             for hand_landmarks in converted_world_landmarks:
                 thumb_tip = hand_landmarks[4]
                 index_tip = hand_landmarks[8]
+                pinch_center = (thumb_tip + index_tip) / 2.0
                 # pinch detection
                 pinch_distance = np.linalg.norm(index_tip - thumb_tip)
                 is_pinch = pinch_distance < 5.0 
                 # cube hit detection
-                cube_to_tip = np.linalg.norm(index_tip - self.object_pos)
-                is_hit = cube_to_tip < 5.0
+                dist_to_object = np.linalg.norm(pinch_center - self.object_pos)
+                is_hit = dist_to_object < 10.0
 
+                pinched = is_pinch
                 grabbed = is_pinch and is_hit
                 if grabbed:
-                    self.object_pos = index_tip.copy()
+                    self.object_pos = pinch_center.copy()
                     break
+        
+        # debug 
+        cv2.putText(frame, "Pinched: " + str(pinched), (20, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        dist_text = "DistToObject: N/A"
+        if dist_to_object is not None:
+            dist_text = "DistToObject: " + str(round(dist_to_object, 2))
+        cv2.putText(frame, dist_text, (20, 85), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+
+        # upload the annotated camera frame as texture
+        # moving this here instead of task 3 for debug
+        if not hasattr(self, "frame_tex"):
+            self.frame_tex = self.ctx.texture(frame.shape[1::-1], 3)
+        self.frame_tex.write(frame.tobytes())
+        self.frame_tex.use()
+
+        identity = Matrix44.identity()  # screen-space fullscreen
+        self.prog3d['Mvp'].write(identity.astype('f4'))
+        self.prog3d['Color'].value = (1.0, 1.0, 1.0)
+        self.prog3d['Light'].value = (0.0, 0.0, 100.0)
+        self.prog3d['withTexture'].value = True
+        
+        self.quad.render(moderngl.TRIANGLE_STRIP)
+        
+        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
         
         """
         ----------------------------------------------------------------------
@@ -262,23 +282,6 @@ class CameraAR(mglw.WindowConfig):
                 self.withTexture.value = False
                 
                 self.vao_marker.render()
-
-        # Render 2D landmarks for sanity check
-        # if detection_result and detection_result.hand_landmarks:
-        #     for hand_landmarks in image_landmarks_list:
-        #         for l in hand_landmarks:
-        #             x = (l.x * 2.0) - 1.0
-        #             y = 1.0 - (l.y * 2.0)
-        #             pos = np.array([x * 30, y * 30, -30])
-        #             scale = Matrix44.from_scale([0.2, 0.2, 0.2])
-        #             translate = Matrix44.from_translation(pos)
-        #             marker_mvp = proj * translate * scale
-
-        #             self.color.value = (1.0, 0.0, 0.0)
-        #             self.withTexture.value = False
-        #             self.mvp.write(marker_mvp.astype('f4'))
-
-        #             self.vao_marker.render()
 
     def on_render(self, time, frame_time):
         # wrap render, cuz version 3.1.1 calls this instead

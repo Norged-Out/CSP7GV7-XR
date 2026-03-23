@@ -136,6 +136,8 @@ def solvepnp(model_landmarks_list, image_landmarks_list,
         """
         # estimate hand rotation and translation
         success, rvec, tvec = cv2.solvePnP(model_points, image_points, camera_matrix, None)
+        if not success:
+            continue
         rotation_matrix, _ = cv2.Rodrigues(rvec) # convert into 3x3 matrix
         # transform points from local to world space
         world_points = np.dot(model_points, rotation_matrix.T) + tvec.reshape(1, 3)
@@ -214,6 +216,7 @@ if __name__ == '__main__':
         """
         world_landmarks_list = []
         reprojection_points_list = []
+        reprojection_error = None
         frame_height, frame_width = frame.shape[:2]
         camera_matrix = get_camera_matrix(frame_width, frame_height)
         # check if hand is detected
@@ -230,7 +233,20 @@ if __name__ == '__main__':
             
         for hand_landmarks in reprojection_points_list:
             for l in hand_landmarks:
-                cv2.circle(frame, (int(l[0]), int(l[1])), 3, (0, 0, 255), 2)
+                cv2.circle(frame, (int(l[0]), int(l[1])), 3, (255, 0, 0), 2)
+
+        if reprojection_error is None:
+            error_text = "Reproj error: N/A"
+            error_color = (255, 255, 0)
+        else:
+            error_text = f"Reproj error: {reprojection_error:.2f} px"
+            if reprojection_error <= 5.0:
+                error_color = (0, 255, 0)
+            elif reprojection_error <= 10.0:
+                error_color = (255, 255, 0)
+            else:
+                error_color = (255, 0, 0)
+        cv2.putText(frame, error_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, error_color, 2)
         
         # Calculating the FPS
         currentTime = time.time()
